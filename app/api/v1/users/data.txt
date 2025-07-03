@@ -1,0 +1,532 @@
+from sqlalchemy import CheckConstraint, Enum, Index, UniqueConstraint, create_engine, Column, String, DateTime, Boolean, ForeignKey, Float, Text
+from sqlalchemy.orm import relationship, validates
+# from sqlalchemy.ext.declarative import as_declarative
+from sqlalchemy.orm import Session
+from sqlalchemy.ext.declarative import declared_attr
+from app.database import Base
+import uuid
+from sqlalchemy.dialects.postgresql import UUID
+from datetime import datetime, timezone
+from enum import Enum as PyEnum
+
+    
+    
+# Roles table
+class Role(Base):
+    __tablename__ = 'roles'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), unique=True, nullable=False)
+    is_active = Column(Boolean, default=True)
+    description = Column(Text, nullable=True)  
+    # Relationship
+    user_role_assignments = relationship('UserRoleAssignment', back_populates='role')
+
+# Positions table
+class Position(Base):
+    __tablename__ = 'positions'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), unique=True, nullable=False)
+    description = Column(Text, nullable=True)  
+    # Relationship
+    staff_position_assignments = relationship('StaffPositionAssignment', back_populates='position')
+
+# CoEs table
+class CoE(Base):
+    __tablename__ = 'coes'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), unique=True, nullable=False)
+    coe_number = Column(String(255), unique=True, nullable=False)
+    description = Column(Text, nullable=True)  
+    # Relationship
+    staff_coe_assignments = relationship('StaffCoEAssignment', back_populates='coe')
+
+# Directorates table
+class Directorate(Base):
+    __tablename__ = 'directorates'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), unique=True, nullable=False)
+    description = Column(Text, nullable=True)  
+    # Relationship
+    departments = relationship('Department', back_populates='directorate')
+
+# Departments table
+class Department(Base):
+    __tablename__ = 'departments'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), unique=True, nullable=False)
+    directorate_id = Column(UUID(as_uuid=True), ForeignKey('directorates.id', ondelete='CASCADE'))
+    description = Column(Text, nullable=True)  
+    # Relationship
+    directorate = relationship('Directorate', back_populates='departments')
+    staff_department_assignments = relationship('StaffDepartmentAssignment', back_populates='department')
+
+class Gender(PyEnum):
+    Male = "Male"
+    Female = "Female"
+    
+# Staff table
+class Staff(Base):
+    __tablename__ = 'staffs'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    emp_number = Column(String(255), unique=True, nullable=False)
+    first_name = Column(String(255), nullable=False)
+    last_name = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
+    phone = Column(String(15), unique=True)
+    gender = Column(Enum(Gender), nullable=True)
+    dob = Column(DateTime, nullable=False)
+    home_address = Column(Text, nullable=True)
+    highest_education = Column(String(255), nullable=True)
+    field_of_study = Column(String(255), nullable=True)
+    date_engaged = Column(DateTime, nullable=True)
+    active = Column(Boolean, default=False)
+    date_created = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))
+    is_deleted = Column(Boolean, default=False)
+    
+    # Relationships
+    role_assignments = relationship('UserRoleAssignment', back_populates='staff')
+    position_assignments = relationship('StaffPositionAssignment', back_populates='staff')
+    coe_assignments = relationship('StaffCoEAssignment', back_populates='staff')
+    department_assignments = relationship('StaffDepartmentAssignment', back_populates='staff')
+    user = relationship('User', back_populates='staff', uselist=False)
+    # Add the relationship to StaffGrantsAssignment
+    staff_grants = relationship('StaffGrantsAssignment', back_populates='staff')
+
+# Staff Role Assignments table
+class UserRoleAssignment(Base):
+    __tablename__ = 'user_role_assignments'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey('staffs.id', ondelete='CASCADE'))
+    role_id = Column(UUID(as_uuid=True), ForeignKey('roles.id', ondelete='CASCADE'))
+    start_date = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
+    end_date = Column(DateTime, nullable=True)
+    
+    # Relationships
+    staff = relationship('Staff', back_populates='role_assignments')
+    role = relationship('Role', back_populates='user_role_assignments')
+
+# Staff Position Assignment with Overlap Prevention
+class StaffPositionAssignment(Base):
+    __tablename__ = 'staff_position_assignments'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey('staffs.id', ondelete='CASCADE'))
+    position_id = Column(UUID(as_uuid=True), ForeignKey('positions.id', ondelete='CASCADE'))
+    start_date = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
+    end_date = Column(DateTime, nullable=True)
+    staff = relationship('Staff', back_populates='position_assignments')
+    position = relationship('Position', back_populates='staff_position_assignments')
+
+   
+# Staff CoE Assignment with Overlap Prevention
+class StaffCoEAssignment(Base):
+    __tablename__ = 'staff_coe_assignments'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey('staffs.id', ondelete='CASCADE'))
+    coe_id = Column(UUID(as_uuid=True), ForeignKey('coes.id', ondelete='CASCADE'))
+    start_date = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
+    end_date = Column(DateTime, nullable=True)
+    staff = relationship('Staff', back_populates='coe_assignments')
+    coe = relationship('CoE', back_populates='staff_coe_assignments')
+
+
+# Staff Department Assignments table
+class StaffDepartmentAssignment(Base):
+    __tablename__ = 'staff_department_assignments'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey('staffs.id', ondelete='CASCADE'))
+    department_id = Column(UUID(as_uuid=True), ForeignKey('departments.id', ondelete='CASCADE'))
+    start_date = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
+    end_date = Column(DateTime, nullable=True)
+    
+    # Relationships
+    staff = relationship('Staff', back_populates='department_assignments')
+    department = relationship('Department', back_populates='staff_department_assignments')
+
+# Users table
+class User(Base):
+    __tablename__ = 'users'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username = Column(String(255), unique=True, nullable=False)
+    hashed_password = Column(String(255))
+    otp = Column(String(255))
+    otp_expires_at = Column(DateTime)
+    is_active = Column(Boolean, default=False)
+    is_verified = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    
+    # Foreign Key relationship
+    staff_id = Column(UUID(as_uuid=True), ForeignKey('staffs.id', ondelete='CASCADE'))
+    staff = relationship('Staff', back_populates='user')
+
+# Grants table
+class Grant(Base):
+    __tablename__ = 'grants'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), unique=True, nullable=False)
+    grant_number = Column(String(255), unique=True, nullable=False)
+    description = Column(Text, nullable=True)  
+    # Relationship
+    staff_grants = relationship('StaffGrantsAssignment', back_populates='grant')
+
+# Staff Grants with Overlap Prevention
+class StaffGrantsAssignment(Base):
+    __tablename__ = 'staff_grants'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey('staffs.id', ondelete='CASCADE'))
+    grant_id = Column(UUID(as_uuid=True), ForeignKey('grants.id', ondelete='CASCADE'))
+    start_date = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
+    end_date = Column(DateTime, nullable=True)
+    work_time_percentage = Column(Float, nullable=False)
+    staff = relationship('Staff', back_populates='staff_grants')
+    grant = relationship('Grant', back_populates='staff_grants')
+
+
+# Workflow Group Types
+class WorkGroupType(PyEnum):
+    timesheet = "Timesheet"
+    leave = "Leave"
+
+# WorkGroup Model
+class WorkGroup(Base):
+    __tablename__ = 'workgroups'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    type = Column(Enum(WorkGroupType), nullable=False) 
+    supervisor_id = Column(UUID(as_uuid=True), ForeignKey('staffs.id', ondelete='SET NULL'))
+    hr_id = Column(UUID(as_uuid=True), ForeignKey('staffs.id', ondelete='SET NULL'))
+
+    # Relationships
+    supervisor = relationship('Staff', foreign_keys=[supervisor_id])
+    hr = relationship('Staff', foreign_keys=[hr_id])
+    members = relationship('WorkGroupMember', back_populates='workgroup')
+
+# WorkGroupMember Model with Role Logic
+class WorkGroupRole(PyEnum):
+    first_approver = "First Approver"
+    second_approver = "Second Approver"
+    third_approver = "Third Approver"
+    member = "Member"
+
+class WorkGroupMember(Base):
+    __tablename__ = 'workgroup_members'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey('staffs.id', ondelete='CASCADE'))
+    workgroup_id = Column(UUID(as_uuid=True), ForeignKey('workgroups.id', ondelete='CASCADE'))
+    role = Column(Enum(WorkGroupRole), nullable=False, default=WorkGroupRole.member)
+    date_assigned = Column(DateTime, default=datetime.now(timezone.utc))
+
+    # Relationships
+    staff = relationship('Staff')
+    workgroup = relationship('WorkGroup', back_populates='members')
+
+    # Unique Constraint to prevent duplicate staff assignments
+    __table_args__ = (
+        UniqueConstraint('staff_id', 'workgroup_id', name='uq_staff_workgroup'),
+    )
+
+# LeaveRequest Model Adjustments
+class LeaveRequestStatus(PyEnum):
+    Pending_supervisor = "Pending Supervisor Approval"
+    Pending_hr = "Pending HR Approval"
+    Approved = "Approved"
+    Rejected = "Rejected"
+
+class LeaveRequest(Base):
+    __tablename__ = 'leave_requests'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey('staffs.id', ondelete='CASCADE'))
+    workgroup_id = Column(UUID(as_uuid=True), ForeignKey('workgroups.id', ondelete='CASCADE'))
+    leave_start_date = Column(DateTime, nullable=False)
+    leave_end_date = Column(DateTime, nullable=False)
+    reason = Column(Text, nullable=True)
+    status = Column(Enum(LeaveRequestStatus), default=LeaveRequestStatus.Pending_supervisor, nullable=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+
+    # Relationships
+    staff = relationship('Staff')
+    workgroup = relationship('WorkGroup')
+
+
+
+
+          
+# @uploadsRouter.post("/upload-roles")
+# async def upload_roles(file: UploadFile, db: Session = Depends(get_db)):
+#     if not file.filename.endswith(('.xlsx', '.xls')):
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="Invalid file format. Only Excel files are supported."
+#         )
+
+#     try:
+#         # Read the Excel file into a DataFrame
+#         df = pd.read_excel(file.file)
+
+#         # Validate the required columns
+#         required_columns = {"role"}
+#         if not required_columns.issubset(df.columns):
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail=f"Excel file must contain the following columns: {', '.join(required_columns)}"
+#             )
+
+#         # Deduplicate the data to avoid repeated processing
+#         df = df.drop_duplicates(subset=["role"])
+
+#         # Iterate through the deduplicated DataFrame
+#         for _, row in df.iterrows():
+#             role_name = row["role"].strip()
+
+#             # Check if the role exists
+#             role = db.query(Role).filter_by(name=role_name).first()
+#             if not role:
+#                 # Add a new role if it doesn't exist
+#                 role = Role(
+#                     id=uuid.uuid4(),
+#                     name=role_name
+#                 )
+#                 db.add(role)
+
+#         db.commit()
+#         return {"detail": "Roles uploaded successfully."}
+
+#     except Exception as e:
+#         db.rollback()
+#         if "duplicate key value violates unique constraint" in str(e):
+#             raise HTTPException(
+#                 status_code=status.HTTP_409_CONFLICT,
+#                 detail="Duplicate entry found. Please ensure the file does not contain duplicate records."
+#             )
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Error processing the file: {str(e)}"
+#         )
+        
+
+        
+# assign approver to workgroup
+@adminRouter.post("/assign-workgroup-approver", status_code=status.HTTP_201_CREATED)
+def assign_workgroup_approver(
+    workgroup_id: UUID,
+    approver_id: UUID,
+    db: Session = Depends(get_db)
+):
+    # Validate the workgroup exists
+    workgroup = db.query(WorkGroup).filter(WorkGroup.id == workgroup_id).first()
+    if not workgroup:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workgroup not found")
+
+    # Validate the approver exists
+    approver = db.query(Staff).filter(Staff.id == approver_id).first()
+    if not approver:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approver not found")
+
+    # Assign the approver to the workgroup
+    workgroup.approver_id = approver_id
+    db.commit()
+
+    return {"message": "Approver assigned successfully", "workgroup": workgroup}
+
+
+
+
+
+
+@leaveRouter.post("/apply")
+def apply_leave(
+    staff_id: UUID,
+    leave_type_id: UUID,
+    start_date: datetime,
+    end_date: datetime,
+    db: Session = Depends(get_db),
+):
+    """
+    Staff applies for leave. Checks eligibility, balances, and approvers.
+    """
+    # Fetch staff
+    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff not found.")
+
+    # Check if staff belongs to a workgroup with approvers
+    workgroup = (
+        db.query(WorkGroup)
+        .join(WorkGroup.members)
+        .filter(WorkGroup.members.any(staff_id=staff_id))
+        .first()
+    )
+    if not workgroup or not workgroup.approvers:
+        raise HTTPException(
+            status_code=400, detail="Staff must belong to a workgroup with approvers."
+        )
+
+    # Fetch leave type and balance
+    leave_type = db.query(LeaveType).filter(LeaveType.id == leave_type_id).first()
+    if not leave_type:
+        raise HTTPException(status_code=404, detail="Leave type not found.")
+
+    leave_balance = (
+        db.query(LeaveRecordss)
+        .filter(LeaveRecordss.staff_id == staff_id, LeaveRecordss.leave_type_id == leave_type_id)
+        .first()
+    )
+    if not leave_balance or leave_balance.balance_days <= 0:
+        raise HTTPException(
+            status_code=400, detail="Insufficient leave balance for this leave type."
+        )
+
+    # Fetch leave policies
+    leave_policy = (
+        db.query(LeavePolicies)
+        .filter(LeavePolicies.leave_type_id == leave_type_id, LeavePolicies.position_type_id == staff.position_assignments[0].position.position_type_id)
+        .first()
+    )
+    if not leave_policy:
+        raise HTTPException(
+            status_code=400, detail="No leave policy found for this leave type and position."
+        )
+
+    # Check leave duration validity
+    leave_duration = (end_date - start_date).days + 1
+    if leave_duration > leave_policy.max_days:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Leave duration exceeds maximum allowed days ({leave_policy.max_days}).",
+        )
+    if leave_duration > leave_balance.balance_days:
+        raise HTTPException(
+            status_code=400,
+            detail="Leave duration exceeds available leave balance.",
+        )
+
+    # Create leave application
+    leave_application = LeaveApplication(
+        staff_id=staff_id,
+        leave_type_id=leave_type_id,
+        start_date=start_date,
+        end_date=end_date,
+        status="Pending",
+    )
+    db.add(leave_application)
+    db.commit()
+    db.refresh(leave_application)
+
+    return {"message": "Leave application submitted.", "leave_application_id": leave_application.id}
+
+@leaveRouter.post("/cancel")
+def cancel_leave(
+    leave_application_id: UUID, db: Session = Depends(get_db)
+):
+    """
+    Staff cancels their leave request.
+    """
+    leave_application = (
+        db.query(LeaveApplication)
+        .filter(LeaveApplication.id == leave_application_id, LeaveApplication.status == "Pending")
+        .first()
+    )
+    if not leave_application:
+        raise HTTPException(
+            status_code=404, detail="Pending leave application not found."
+        )
+
+    # Update status to cancelled
+    leave_application.status = "Cancelled"
+    leave_application.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {"message": "Leave application cancelled."}
+
+@leaveRouter.post("/approve")
+def approve_leave(
+    leave_application_id: UUID, approver_id: UUID, approve: bool, reason: str = None, db: Session = Depends(get_db)
+):
+    """
+    Approver approves or declines a leave request.
+    """
+    # Fetch leave application
+    leave_application = (
+        db.query(LeaveApplication).filter(LeaveApplication.id == leave_application_id).first()
+    )
+    if not leave_application or leave_application.status not in ["Pending"]:
+        raise HTTPException(
+            status_code=404, detail="Pending leave application not found."
+        )
+
+    # Check approver
+    approver = db.query(Approver).filter(Approver.id == approver_id).first()
+    if not approver:
+        raise HTTPException(status_code=404, detail="Approver not found.")
+
+    # Check if approver is assigned to this workgroup
+    workgroup = leave_application.staff.linked_staffs[0].workgroup
+    if approver.workgroup_id != workgroup.id:
+        raise HTTPException(
+            status_code=403, detail="Approver is not assigned to this workgroup."
+        )
+
+    # Process approval or rejection
+    if approve:
+        # Notify staff of first approval or final approval
+        if approver.approver_order == 1:
+            leave_application.status = "Pending"
+        elif approver.approver_order == 2:
+            leave_application.status = "Approved"
+    else:
+        leave_application.status = "Rejected"
+
+    leave_application.updated_at = datetime.now(timezone.utc)
+    leave_application.comment = reason
+    db.commit()
+
+    # Notify relevant parties
+    notifications = []
+    if leave_application.status == "Rejected":
+        notifications.append(
+            Notification(
+                recipient_id=leave_application.staff_id,
+                message=f"Leave request declined by {approver.staff.first_name} {approver.staff.last_name}. Reason: {reason}",
+            )
+        )
+    elif leave_application.status == "Approved":
+        notifications.append(
+            Notification(
+                recipient_id=leave_application.staff_id,
+                message="Your leave request has been fully Approved.",
+            )
+        )
+
+    db.bulk_save_objects(notifications)
+    db.commit()
+
+    return {"message": f"Leave application {leave_application.status.lower()}.", "status": leave_application.status}
+
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.schemas import LeaveApplicationCreate, LeaveApplicationUpdate
+from appapp.models.models  Staff, LeaveApplication, Approver, WorkGroup
+from app.utils import validate_leave_balance, send_notification
+import uuid
+
+router = APIRouter()
